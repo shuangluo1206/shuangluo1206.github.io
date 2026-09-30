@@ -103,4 +103,4 @@ theme: butterfly
 deploy:
   type: git
   repo: git@github.com:shuangluo1206/shuangluo1206.github.io.git
-  branch: main
+  branch: src
