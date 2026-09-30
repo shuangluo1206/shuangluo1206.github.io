@@ -1,0 +1,234 @@
+<!DOCTYPE html><html lang="zh-CN" data-theme="light"><head><meta charset="UTF-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width, initial-scale=1.0,viewport-fit=cover"><title>Agent 掉线了怎么办：我给评测Agent装了个双模型路由 | Luoshuang's Blog</title><meta name="author" content="Luoshuang"><meta name="copyright" content="Luoshuang"><meta name="format-detection" content="telephone=no"><meta name="theme-color" content="#ffffff"><meta name="description" content="问题的来源：跑 bench 跑出来的「模型脾气」做评测的人对模型的毛病有一种朴素的熟悉感——不是从论文里读来的，是被坑出来的。我在 bench 实测里踩到的两个：  主力模型偶尔在网关处开局就报错（502&#x2F;超时，一个字还没吐）——大概率是抖动，重试往往就好 主力模型的 write_file 有老毛病：参数里丢 path——不是偶发，是稳定复现的脾气  第二个特别有意思：模型很努力地调工具">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Agent 掉线了怎么办：我给评测Agent装了个双模型路由">
+<meta property="og:url" content="https://shuangluo1206.github.io/2026/10/01/Agent%E6%8E%89%E7%BA%BF%E4%BA%86%E6%80%8E%E4%B9%88%E5%8A%9E-%E6%88%91%E7%BB%99%E8%AF%84%E6%B5%8BAgent%E8%A3%85%E4%BA%86%E4%B8%AA%E5%8F%8C%E6%A8%A1%E5%9E%8B%E8%B7%AF%E7%94%B1/index.html">
+<meta property="og:site_name" content="Luoshuang&#39;s Blog">
+<meta property="og:description" content="问题的来源：跑 bench 跑出来的「模型脾气」做评测的人对模型的毛病有一种朴素的熟悉感——不是从论文里读来的，是被坑出来的。我在 bench 实测里踩到的两个：  主力模型偶尔在网关处开局就报错（502&#x2F;超时，一个字还没吐）——大概率是抖动，重试往往就好 主力模型的 write_file 有老毛病：参数里丢 path——不是偶发，是稳定复现的脾气  第二个特别有意思：模型很努力地调工具">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://avatars.githubusercontent.com/u/91397828?v=4">
+<meta property="article:published_time" content="2026-09-30T16:00:00.000Z">
+<meta property="article:modified_time" content="2026-09-30T16:50:33.468Z">
+<meta property="article:author" content="Luoshuang">
+<meta property="article:tag" content="Agent">
+<meta property="article:tag" content="架构设计">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://avatars.githubusercontent.com/u/91397828?v=4"><script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "Agent 掉线了怎么办：我给评测Agent装了个双模型路由",
+  "url": "https://shuangluo1206.github.io/2026/10/01/Agent%E6%8E%89%E7%BA%BF%E4%BA%86%E6%80%8E%E4%B9%88%E5%8A%9E-%E6%88%91%E7%BB%99%E8%AF%84%E6%B5%8BAgent%E8%A3%85%E4%BA%86%E4%B8%AA%E5%8F%8C%E6%A8%A1%E5%9E%8B%E8%B7%AF%E7%94%B1/",
+  "image": "https://avatars.githubusercontent.com/u/91397828?v=4",
+  "datePublished": "2026-09-30T16:00:00.000Z",
+  "dateModified": "2026-09-30T16:50:33.468Z",
+  "author": [
+    {
+      "@type": "Person",
+      "name": "Luoshuang",
+      "url": "https://shuangluo1206.github.io"
+    }
+  ]
+}</script><link rel="shortcut icon" href="/img/favicon.png"><link rel="canonical" href="https://shuangluo1206.github.io/2026/10/01/Agent%E6%8E%89%E7%BA%BF%E4%BA%86%E6%80%8E%E4%B9%88%E5%8A%9E-%E6%88%91%E7%BB%99%E8%AF%84%E6%B5%8BAgent%E8%A3%85%E4%BA%86%E4%B8%AA%E5%8F%8C%E6%A8%A1%E5%9E%8B%E8%B7%AF%E7%94%B1/index.html"><link rel="preconnect" href="//cdn.jsdelivr.net"/><link rel="preconnect" href="//busuanzi.ibruce.info"/><link rel="stylesheet" href="/css/index.css?v=5.7.0"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.3.1/css/all.min.css"><script>
+    (() => {
+      
+    const saveToLocal = {
+      set: (key, value, ttl) => {
+        const data = { value }
+
+        if (ttl != null) {
+          data.expiry = Date.now() + ttl * 86400000
+        }
+
+        localStorage.setItem(key, JSON.stringify(data))
+      },
+      get: key => {
+        const itemStr = localStorage.getItem(key)
+        if (!itemStr) return
+
+        try {
+          const data = JSON.parse(itemStr)
+
+          if (data.expiry && Date.now() > data.expiry) {
+            localStorage.removeItem(key)
+            return
+          }
+
+          return data.value
+        } catch {
+          localStorage.removeItem(key)
+        }
+      }
+    }
+
+    const scriptCache = new Map()
+    const cssCache = new Map()
+    window.btf = {
+      saveToLocal,
+      getScript: (url, attr = {}) => {
+        if (scriptCache.has(url)) {
+          return scriptCache.get(url)
+        }
+
+        const promise = new Promise((resolve, reject) => {
+          const script = document.createElement('script')
+
+          script.src = url
+          script.async = true
+
+          for (const key in attr) {
+            script.setAttribute(key, attr[key])
+          }
+
+          script.onload = resolve
+          script.onerror = reject
+
+          document.head.appendChild(script)
+        })
+
+        scriptCache.set(url, promise)
+
+        return promise
+      },
+      getCSS: (url, id) => {
+        if (cssCache.has(url)) {
+          return cssCache.get(url)
+        }
+
+        const promise = new Promise((resolve, reject) => {
+          const link = document.createElement('link')
+
+          link.rel = 'stylesheet'
+          link.href = url
+
+          if (id) {
+            link.id = id
+          }
+
+          link.onload = resolve
+          link.onerror = reject
+
+          document.head.appendChild(link)
+        })
+
+        cssCache.set(url, promise)
+
+        return promise
+      },
+      addGlobalFn: (key, fn, name = false, parent = window) => {
+        if (!false && key.startsWith('pjax')) return
+        const globalFn = parent.globalFn || {}
+        globalFn[key] = globalFn[key] || {}
+        globalFn[key][name || Object.keys(globalFn[key]).length] = fn
+        parent.globalFn = globalFn
+      }
+    }
+  
+      
+      const metaThemeColor = document.querySelector('meta[name="theme-color"]')
+      const activateDarkMode = () => {
+        document.documentElement.dataset.theme = 'dark'
+        if (metaThemeColor !== null) {
+          metaThemeColor.setAttribute('content', '#0d0d0d')
+        }
+      }
+      const activateLightMode = () => {
+        document.documentElement.dataset.theme = 'light'
+        if (metaThemeColor !== null) {
+          metaThemeColor.setAttribute('content', '#ffffff')
+        }
+      }
+
+      btf.activateDarkMode = activateDarkMode
+      btf.activateLightMode = activateLightMode
+
+      const theme = saveToLocal.get('theme')
+    
+          theme === 'dark' ? activateDarkMode() : theme === 'light' ? activateLightMode() : null
+        
+      
+      const asideStatus = saveToLocal.get('aside-status')
+      if (asideStatus !== undefined) {
+        document.documentElement.classList.toggle('hide-aside', asideStatus === 'hide')
+      }
+    
+      
+    const detectApple = () => {
+      if (/iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent)) {
+        document.documentElement.classList.add('apple')
+      }
+    }
+    detectApple()
+  
+    })()
+  </script><script>const GLOBAL_CONFIG = {
+  root: '/',
+  algolia: undefined,
+  localSearch: undefined,
+  translate: undefined,
+  highlight: {"plugin":"highlight.js","highlightCopy":true,"highlightLang":true,"highlightHeightLimit":false,"highlightFullpage":false,"highlightMacStyle":false},
+  copy: {
+    success: '复制成功',
+    error: '复制失败',
+    noSupport: '浏览器不支持'
+  },
+  relativeDate: {
+    homepage: false,
+    post: false
+  },
+  runtime: '',
+  dateSuffix: {
+    just: '刚刚',
+    min: '分钟前',
+    hour: '小时前',
+    day: '天前',
+    month: '个月前'
+  },
+  copyright: undefined,
+  lightbox: 'null',
+  Snackbar: undefined,
+  infinitegrid: {
+    js: 'https://cdn.jsdelivr.net/npm/@egjs/infinitegrid@4.13.0/dist/infinitegrid.min.js',
+    buttonText: '加载更多'
+  },
+  isPhotoFigcaption: false,
+  islazyloadPlugin: false,
+  isAnchor: false,
+  percent: {
+    toc: true,
+    rightside: false,
+  },
+  autoDarkmode: false
+}</script><script id="config-diff">var GLOBAL_CONFIG_SITE = {
+  title: 'Agent 掉线了怎么办：我给评测Agent装了个双模型路由',
+  isHighlightShrink: false,
+  isToc: true,
+  pageType: 'post'
+}</script><meta name="generator" content="Hexo 7.3.0"></head><body><div id="sidebar"><div id="menu-mask"></div><div id="sidebar-menus"><div class="avatar-img text-center"><img src="https://avatars.githubusercontent.com/u/91397828?v=4" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/></div><div class="site-data text-center"><a href="/archives/"><div class="headline">文章</div><div class="length-num">2</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">3</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">1</div></a></div><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> 首页</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> 归档</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> 标签</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><i class="fa-fw fas fa-folder"></i><span> 分类</span></a></div><div class="menus_item"><a class="site-page" href="/about/"><i class="fa-fw fas fa-user"></i><span> 关于</span></a></div></div></div></div><div class="post" id="body-wrap"><header class="post-bg" id="page-header"><nav id="nav"><span id="blog-info"><a class="nav-site-title" href="/"><span class="site-name">Luoshuang's Blog</span></a><a class="nav-page-title" href="/"><span class="site-name">Agent 掉线了怎么办：我给评测Agent装了个双模型路由</span><span class="site-name"><i class="fa-solid fa-circle-arrow-left"></i><span>  返回首页</span></span></a></span><div id="menus"><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> 首页</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> 归档</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> 标签</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><i class="fa-fw fas fa-folder"></i><span> 分类</span></a></div><div class="menus_item"><a class="site-page" href="/about/"><i class="fa-fw fas fa-user"></i><span> 关于</span></a></div></div><div id="toggle-menu"><span class="site-page"><i class="fas fa-bars fa-fw"></i></span></div></div></nav><div id="post-info"><h1 class="post-title">Agent 掉线了怎么办：我给评测Agent装了个双模型路由</h1><div id="post-meta"><div class="meta-firstline"><span class="post-meta-date"><i class="far fa-calendar-alt fa-fw post-meta-icon"></i><span class="post-meta-label">发表于</span><time class="post-meta-date-created" datetime="2026-09-30T16:00:00.000Z" title="发表于 2026-10-01 00:00:00">2026-10-01</time><span class="post-meta-separator">|</span><i class="fas fa-history fa-fw post-meta-icon"></i><span class="post-meta-label">更新于</span><time class="post-meta-date-updated" datetime="2026-09-30T16:50:33.468Z" title="更新于 2026-10-01 00:50:33">2026-10-01</time></span><span class="post-meta-categories"><span class="post-meta-separator">|</span><i class="fas fa-inbox fa-fw post-meta-icon"></i><a class="post-meta-categories" href="/categories/%E9%A1%B9%E7%9B%AE/">项目</a></span></div><div class="meta-secondline"><span class="post-meta-separator">|</span><span class="post-meta-pv-cv" id="" data-flag-title=""><i class="far fa-eye fa-fw post-meta-icon"></i><span class="post-meta-label">浏览量:</span><span id="busuanzi_value_page_pv"><i class="fa-solid fa-spinner fa-spin"></i></span></span></div></div></div></header><main class="layout" id="content-inner"><div id="post"><article class="container post-content" id="article-container"><h2 id="问题的来源：跑-bench-跑出来的「模型脾气」"><a href="#问题的来源：跑-bench-跑出来的「模型脾气」" class="headerlink" title="问题的来源：跑 bench 跑出来的「模型脾气」"></a>问题的来源：跑 bench 跑出来的「模型脾气」</h2><p>做评测的人对模型的毛病有一种朴素的熟悉感——不是从论文里读来的，是被坑出来的。我在 bench 实测里踩到的两个：</p>
+<ol>
+<li><strong>主力模型偶尔在网关处开局就报错</strong>（502&#x2F;超时，一个字还没吐）——大概率是抖动，重试往往就好</li>
+<li><strong>主力模型的 write_file 有老毛病：参数里丢 path</strong>——不是偶发，是稳定复现的脾气</li>
+</ol>
+<p>第二个特别有意思：模型很努力地调工具，参数碎片拼出来一看，<code>&#123;&quot;content&quot;:&quot;周均负载 32,244 MW&quot;&#125;</code>——就是没有 path。文件写哪？不知道。</p>
+<p>如果只跑一个模型，这些坑只能人肉盯。但既然手上有一个 OpenAI 兼容的聚合网关、一个 key 能调多个模型，那很自然的想法是：<strong>让另一个模型当备胎</strong>。</p>
+<h2 id="设计：一个「插座转接头」"><a href="#设计：一个「插座转接头」" class="headerlink" title="设计：一个「插座转接头」"></a>设计：一个「插座转接头」</h2><p>我的 Agent 循环只认一个 <code>Model</code> 接口。所以路由器不是「调度器」那样的旁路系统，而是——</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">class ModelRouter implements Model &#123; ... &#125;</span><br></pre></td></tr></table></figure>
+
+<p>它自己实现 <code>Model</code> 接口，里面站着两个真模型（主力 + 备用）。Agent 拔插的还是同一个插座，<strong>根本不知道背后站着两个模型</strong>。这是整个设计里我最满意的一点：路由是零侵入的，循环一行没改。</p>
+<h2 id="三种失败，三种策略"><a href="#三种失败，三种策略" class="headerlink" title="三种失败，三种策略"></a>三种失败，三种策略</h2><p>实现过程中发现「模型失败」其实是个混合词，得拆开对待：</p>
+<h3 id="①-开局报错-→-当轮无缝切换"><a href="#①-开局报错-→-当轮无缝切换" class="headerlink" title="① 开局报错 → 当轮无缝切换"></a>① 开局报错 → 当轮无缝切换</h3><p>主力一上来就吐 error 事件（一个字还没说），这时历史里什么都还没发生。路由器把错误事件<strong>吞掉</strong>，本轮直接改用备用模型跑完。关键判断：<strong>这不算降级</strong>——可能只是偶发抖动，下一轮主力还有机会。</p>
+<h3 id="②-质量缺陷-→-连败计数，永久降级"><a href="#②-质量缺陷-→-连败计数，永久降级" class="headerlink" title="② 质量缺陷 → 连败计数，永久降级"></a>② 质量缺陷 → 连败计数，永久降级</h3><p>write_file 丢 path 这种「稳定脾气」就不是抖动能解释的了。路由器在事件流旁边开个小缓冲，监视工具参数拼装：<code>done</code> 事件时如果 JSON 里没有 path 字段，连败计数 +1，达到阈值（我设的是 1，一票否决）就永久降级到备用。</p>
+<p>这里有个微妙的设计取舍：<strong>事件已经放行了，没法收回</strong>。所以流中途发现的缺陷只能记账，下一轮才生效——本轮该失败的 write_file 还是会失败。可以接受，因为循环本身有兜底（工具失败会转成 isError 结果，模型能看到并重试）。</p>
+<h3 id="③-流中途报错-→-只计数，下轮生效"><a href="#③-流中途报错-→-只计数，下轮生效" class="headerlink" title="③ 流中途报错 → 只计数，下轮生效"></a>③ 流中途报错 → 只计数，下轮生效</h3><p>事件已经放行没法收回，和 ② 同理。</p>
+<h2 id="验收：一条-prompt-走完两套路由"><a href="#验收：一条-prompt-走完两套路由" class="headerlink" title="验收：一条 prompt 走完两套路由"></a>验收：一条 prompt 走完两套路由</h2><p>测试用两个 fake 模型按剧本演（不烧 token），一条 prompt 把「无缝切换」和「质量降级」全触发一遍。跑出来的路由决策日志：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">· 主力 GLM-5.3 开局报错（网关 502）→ 当轮无缝切 DeepSeek-V4-Pro（下轮主力继续）</span><br><span class="line">· 主力 write_file 丢 path（bench 实测老毛病），连败 1</span><br><span class="line">· 主力连败 1 轮（阈值 1）→ 永久降级到 DeepSeek-V4-Pro</span><br></pre></td></tr></table></figure>
+
+<p>三个断言全过：</p>
+<ul>
+<li>主力的报错<strong>从没漏到 Agent</strong>（消息历史里没有 <code>[模型错误]</code> 字样）</li>
+<li>丢 path 的 write_file <strong>真的失败了</strong>（isError 结果入历史）</li>
+<li>任务<strong>无损完成</strong>（报告和摘要两份文件都落盘）</li>
+</ul>
+<h2 id="一点感想"><a href="#一点感想" class="headerlink" title="一点感想"></a>一点感想</h2><p>这个功能做完回头看，最有价值的不是「双模型」本身，而是<strong>被迫把「模型失败」分类</strong>的过程：环境抖动和模型缺陷是两种病，治疗方案完全不同——前者宽容（当轮换人，下轮还你机会），后者果断（一次实锤就永久换人）。</p>
+<p>评测工程师的日常不就是干这个的吗？给失败分类、定触发条件、决定干预力度。只不过这次的对象，是我自己的 Agent。</p>
+<hr>
+<p>代码在 <a target="_blank" rel="noopener" href="https://github.com/shuangluo1206/my-eval-agent">my-eval-agent</a>（<code>src/ai/router.ts</code>），验收剧本在 <code>scripts/m5-demo.ts</code>。</p>
+</article><div class="post-copyright"><div class="post-copyright__author"><span class="post-copyright-meta"><i class="fas fa-circle-user fa-fw"></i>文章作者: </span><span class="post-copyright-info"><a href="https://shuangluo1206.github.io">Luoshuang</a></span></div><div class="post-copyright__type"><span class="post-copyright-meta"><i class="fas fa-square-arrow-up-right fa-fw"></i>文章链接: </span><span class="post-copyright-info"><a href="https://shuangluo1206.github.io/2026/10/01/Agent%E6%8E%89%E7%BA%BF%E4%BA%86%E6%80%8E%E4%B9%88%E5%8A%9E-%E6%88%91%E7%BB%99%E8%AF%84%E6%B5%8BAgent%E8%A3%85%E4%BA%86%E4%B8%AA%E5%8F%8C%E6%A8%A1%E5%9E%8B%E8%B7%AF%E7%94%B1/">https://shuangluo1206.github.io/2026/10/01/Agent%E6%8E%89%E7%BA%BF%E4%BA%86%E6%80%8E%E4%B9%88%E5%8A%9E-%E6%88%91%E7%BB%99%E8%AF%84%E6%B5%8BAgent%E8%A3%85%E4%BA%86%E4%B8%AA%E5%8F%8C%E6%A8%A1%E5%9E%8B%E8%B7%AF%E7%94%B1/</a></span></div><div class="post-copyright__notice"><span class="post-copyright-meta"><i class="fas fa-circle-exclamation fa-fw"></i>版权声明: </span><span class="post-copyright-info">本博客所有文章除特别声明外，均采用 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank">CC BY-NC-SA 4.0</a> 许可协议。转载请注明来源 <a href="https://shuangluo1206.github.io" target="_blank">Luoshuang's Blog</a>！</span></div></div><div class="tag_share"><div class="post-meta__tag-list"><a class="post-meta__tags" href="/tags/Agent/">Agent</a><a class="post-meta__tags" href="/tags/%E6%9E%B6%E6%9E%84%E8%AE%BE%E8%AE%A1/">架构设计</a></div><div class="post-share"><div class="social-share" data-image="https://avatars.githubusercontent.com/u/91397828?v=4" data-sites="facebook,x,wechat,weibo,qq"></div><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/css/share.min.css" media="print" onload="this.media='all'"><script src="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/js/social-share.min.js" defer></script></div></div><nav class="pagination-post" id="pagination"><a class="pagination-related full-width" href="/2026/10/01/%E6%88%91%E4%B8%BA%E4%BB%80%E4%B9%88%E8%87%AA%E5%B7%B1%E9%80%A0%E4%B8%80%E4%B8%AA%E8%AF%84%E6%B5%8BAgent/" title="我为什么自己造一个评测Agent"><div class="cover" style="background: var(--default-bg-color)"></div><div class="info"><div class="info-1"><div class="info-item-1">上一篇</div><div class="info-item-2">我为什么自己造一个评测Agent</div></div><div class="info-2"><div class="info-item-1">一个重复劳动引发的念头做 LLM 评测的人都有个体会：跑一轮 bench 试标，agent 要跑几十个 turn，人得全程盯轨迹——工具调用对不对、卡在哪一步、判分器为什么扣分。一轮下来半小时起步，而这样的轮次一天要跑好几轮。 盯到第三轮的时候我开始想：读轨迹、查判分点这种活，本身就是个能被 Agent 干的事。 于是有了这个项目：my-eval-agent——一个垂直于评测场景的 Coding Agent，一句话定位是「评估 Agent 的 Agent」。 为什么不用框架市面上现成的 Agent 框架很多，但我选择从零手写 Agent 循环，原因有三：  简历项目的价值在细节：SSE 流式拆包时同一个 chunk 可能同时带 content 和 tool_calls 增量、工具参数要从字节流里一片片拼出来、parse 失败怎么兜底——这些坑只有自己踩过才有面试话术 垂直工具需要干净的挂载点：评测场景的行为定制（轨迹瘦身、前置校验、达标收尾）都挂在循环钩子上，用框架反而要绕 体积：核心三层加起来不到两千行，可控  架构：三层各司其职1cli → agent/loop → ai（M...</div></div></div></a></nav><div class="relatedPosts"><div class="headline"><i class="fas fa-thumbs-up fa-fw"></i><span>相关推荐</span></div><div class="relatedPosts-list"><a class="pagination-related" href="/2026/10/01/%E6%88%91%E4%B8%BA%E4%BB%80%E4%B9%88%E8%87%AA%E5%B7%B1%E9%80%A0%E4%B8%80%E4%B8%AA%E8%AF%84%E6%B5%8BAgent/" title="我为什么自己造一个评测Agent"><div class="cover" style="background: var(--default-bg-color)"></div><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-10-01</div><div class="info-item-2">我为什么自己造一个评测Agent</div></div><div class="info-2"><div class="info-item-1">一个重复劳动引发的念头做 LLM 评测的人都有个体会：跑一轮 bench 试标，agent 要跑几十个 turn，人得全程盯轨迹——工具调用对不对、卡在哪一步、判分器为什么扣分。一轮下来半小时起步，而这样的轮次一天要跑好几轮。 盯到第三轮的时候我开始想：读轨迹、查判分点这种活，本身就是个能被 Agent 干的事。 于是有了这个项目：my-eval-agent——一个垂直于评测场景的 Coding Agent，一句话定位是「评估 Agent 的 Agent」。 为什么不用框架市面上现成的 Agent 框架很多，但我选择从零手写 Agent 循环，原因有三：  简历项目的价值在细节：SSE 流式拆包时同一个 chunk 可能同时带 content 和 tool_calls 增量、工具参数要从字节流里一片片拼出来、parse 失败怎么兜底——这些坑只有自己踩过才有面试话术 垂直工具需要干净的挂载点：评测场景的行为定制（轨迹瘦身、前置校验、达标收尾）都挂在循环钩子上，用框架反而要绕 体积：核心三层加起来不到两千行，可控  架构：三层各司其职1cli → agent/loop → ai（M...</div></div></div></a></div></div></div><div class="aside-content" id="aside-content"><div class="card-widget card-info text-center"><div class="avatar-img"><img src="https://avatars.githubusercontent.com/u/91397828?v=4" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/></div><div class="author-info-name">Luoshuang</div><div class="author-info-description">记录 LLM Evaluation、Agent 开发与秋招路上的技术沉淀</div><div class="site-data"><a href="/archives/"><div class="headline">文章</div><div class="length-num">2</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">3</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">1</div></a></div><a id="card-info-btn" target="_blank" rel="noopener" href="https://github.com/xxxxxx"><i class="fab fa-github"></i><span>Follow Me</span></a></div><div class="card-widget card-announcement"><div class="item-headline"><i class="fas fa-bullhorn fa-shake"></i><span>公告</span></div><div class="announcement_content">This is my Blog</div></div><div class="sticky_layout"><div class="card-widget" id="card-toc"><div class="item-headline"><i class="fas fa-stream"></i><span>目录</span><span class="toc-percentage"></span></div><div class="toc-content"><ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E9%97%AE%E9%A2%98%E7%9A%84%E6%9D%A5%E6%BA%90%EF%BC%9A%E8%B7%91-bench-%E8%B7%91%E5%87%BA%E6%9D%A5%E7%9A%84%E3%80%8C%E6%A8%A1%E5%9E%8B%E8%84%BE%E6%B0%94%E3%80%8D"><span class="toc-number">1.</span> <span class="toc-text">问题的来源：跑 bench 跑出来的「模型脾气」</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E8%AE%BE%E8%AE%A1%EF%BC%9A%E4%B8%80%E4%B8%AA%E3%80%8C%E6%8F%92%E5%BA%A7%E8%BD%AC%E6%8E%A5%E5%A4%B4%E3%80%8D"><span class="toc-number">2.</span> <span class="toc-text">设计：一个「插座转接头」</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%B8%89%E7%A7%8D%E5%A4%B1%E8%B4%A5%EF%BC%8C%E4%B8%89%E7%A7%8D%E7%AD%96%E7%95%A5"><span class="toc-number">3.</span> <span class="toc-text">三种失败，三种策略</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E2%91%A0-%E5%BC%80%E5%B1%80%E6%8A%A5%E9%94%99-%E2%86%92-%E5%BD%93%E8%BD%AE%E6%97%A0%E7%BC%9D%E5%88%87%E6%8D%A2"><span class="toc-number">3.1.</span> <span class="toc-text">① 开局报错 → 当轮无缝切换</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E2%91%A1-%E8%B4%A8%E9%87%8F%E7%BC%BA%E9%99%B7-%E2%86%92-%E8%BF%9E%E8%B4%A5%E8%AE%A1%E6%95%B0%EF%BC%8C%E6%B0%B8%E4%B9%85%E9%99%8D%E7%BA%A7"><span class="toc-number">3.2.</span> <span class="toc-text">② 质量缺陷 → 连败计数，永久降级</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E2%91%A2-%E6%B5%81%E4%B8%AD%E9%80%94%E6%8A%A5%E9%94%99-%E2%86%92-%E5%8F%AA%E8%AE%A1%E6%95%B0%EF%BC%8C%E4%B8%8B%E8%BD%AE%E7%94%9F%E6%95%88"><span class="toc-number">3.3.</span> <span class="toc-text">③ 流中途报错 → 只计数，下轮生效</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E9%AA%8C%E6%94%B6%EF%BC%9A%E4%B8%80%E6%9D%A1-prompt-%E8%B5%B0%E5%AE%8C%E4%B8%A4%E5%A5%97%E8%B7%AF%E7%94%B1"><span class="toc-number">4.</span> <span class="toc-text">验收：一条 prompt 走完两套路由</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%B8%80%E7%82%B9%E6%84%9F%E6%83%B3"><span class="toc-number">5.</span> <span class="toc-text">一点感想</span></a></li></ol></div></div><div class="card-widget card-recent-post"><div class="item-headline"><i class="fas fa-history"></i><span>最新文章</span></div><div class="aside-list"><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/10/01/Agent%E6%8E%89%E7%BA%BF%E4%BA%86%E6%80%8E%E4%B9%88%E5%8A%9E-%E6%88%91%E7%BB%99%E8%AF%84%E6%B5%8BAgent%E8%A3%85%E4%BA%86%E4%B8%AA%E5%8F%8C%E6%A8%A1%E5%9E%8B%E8%B7%AF%E7%94%B1/" title="Agent 掉线了怎么办：我给评测Agent装了个双模型路由">Agent 掉线了怎么办：我给评测Agent装了个双模型路由</a><time datetime="2026-09-30T16:00:00.000Z" title="发表于 2026-10-01 00:00:00">2026-10-01</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/10/01/%E6%88%91%E4%B8%BA%E4%BB%80%E4%B9%88%E8%87%AA%E5%B7%B1%E9%80%A0%E4%B8%80%E4%B8%AA%E8%AF%84%E6%B5%8BAgent/" title="我为什么自己造一个评测Agent">我为什么自己造一个评测Agent</a><time datetime="2026-09-30T16:00:00.000Z" title="发表于 2026-10-01 00:00:00">2026-10-01</time></div></div></div></div></div></div></main><footer id="footer"><div class="footer-other"><div class="footer-copyright"><span class="copyright">&copy;&nbsp;2025 - 2026 By Luoshuang</span><span class="framework-info"><span>框架 </span><a target="_blank" rel="noopener" href="https://hexo.io">Hexo 7.3.0</a><span class="footer-separator">|</span><span>主题 </span><a target="_blank" rel="noopener" href="https://github.com/jerryc127/hexo-theme-butterfly">Butterfly 5.7.0</a></span></div></div></footer></div><div id="rightside"><div id="rightside-config-hide"><button id="readmode" type="button" title="阅读模式"><i class="fas fa-book-open"></i></button><button id="darkmode" type="button" title="日间和夜间模式切换"><i class="fas fa-adjust"></i></button><button id="hide-aside-btn" type="button" title="单栏和双栏切换"><i class="fas fa-arrows-alt-h"></i></button></div><div id="rightside-config-show"><button id="rightside-config" type="button" title="设置"><i class="fas fa-cog fa-spin"></i></button><button class="close" id="mobile-toc-button" type="button" title="目录"><i class="fas fa-list-ul"></i></button><button id="go-up" type="button" title="回到顶部"><span class="scroll-percent"></span><i class="fas fa-arrow-up"></i></button></div></div><div><script src="/js/utils.js?v=5.7.0"></script><script src="/js/main.js?v=5.7.0"></script><div class="js-pjax"></div><script async data-pjax src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script></div></body></html>
